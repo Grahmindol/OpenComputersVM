@@ -34,7 +34,7 @@ public class Internet extends ComponentBase {
 				
 				machine.lua.newTable();
 				
-				// Чтение из сокета
+				// Lecture depuis une prise
 				machine.lua.pushJavaFunction(readArgs -> {
 					try {
 //						System.out.println("READING STARTED");
@@ -44,8 +44,7 @@ public class Internet extends ComponentBase {
 
 						if (readCount > 0) {
 							byte[] result = new byte[readCount];
-							for (int i = 0; i < readCount; i++)
-								result[i] = buffer[i];
+							System.arraycopy(buffer, 0, result, 0, readCount);
 
 							machine.lua.pushByteArray(result);
 							return 1;
@@ -58,7 +57,7 @@ public class Internet extends ComponentBase {
 						return pushEmptyArray();
 					}
 					catch (IOException e) {
-						return pushIOExcetion(e.getMessage());
+						return pushIOException(e.getMessage());
 					}
 				});
 				machine.lua.setField(-2, "read");
@@ -74,7 +73,7 @@ public class Internet extends ComponentBase {
 						return 1;
 					}
 					catch (IOException e) {
-						return pushIOExcetion(e.getMessage());
+						return pushIOException(e.getMessage());
 					}
 				});
 				machine.lua.setField(-2, "write");
@@ -86,7 +85,7 @@ public class Internet extends ComponentBase {
 						inputStream.close();
 						outputStream.close();
 					}
-					catch (IOException e) {}
+					catch (IOException ignored) {}
 					finally {
 						machine.lua.pushBoolean(true);
 						return 1;
@@ -104,7 +103,7 @@ public class Internet extends ComponentBase {
 				return 1;
 			}
 			catch (IOException e) {
-				return pushIOExcetion(e.getMessage());
+				return pushIOException(e.getMessage());
 			}
 		});
 		machine.lua.setField(-2, "connect");
@@ -156,8 +155,7 @@ public class Internet extends ComponentBase {
 						
 						if (readCount > 0) {
 							byte[] result = new byte[readCount];
-							for (int i = 0; i < readCount; i++)
-								result[i] = buffer[i];
+							System.arraycopy(buffer, 0, result, 0, readCount);
 
 							machine.lua.pushByteArray(result);
 							return 1;
@@ -168,7 +166,7 @@ public class Internet extends ComponentBase {
 						}
 					}
 					catch (IOException e) {
-						return pushIOExcetion(e.getMessage());	
+						return pushIOException(e.getMessage());
 					}
 				});
 				machine.lua.setField(-2, "read");
@@ -179,7 +177,7 @@ public class Internet extends ComponentBase {
 						inputStream.close();
 						connection.disconnect();
 					}
-					catch (IOException e) {}
+					catch (IOException ignored) {}
 					finally {
 						machine.lua.pushBoolean(true);
 						return 1;
@@ -229,7 +227,7 @@ public class Internet extends ComponentBase {
 					}
 					catch (IOException e) {
 						e.printStackTrace();
-						return pushIOExcetion(e.getMessage());
+						return pushIOException(e.getMessage());
 					}
 				});
 				machine.lua.setField(-2, "response");
@@ -253,7 +251,7 @@ public class Internet extends ComponentBase {
 		return 1;
 	}
 
-	private int pushIOExcetion(String message) {
+	private int pushIOException(String message) {
 		machine.lua.pushNil();
 		machine.lua.pushString("IOException: " + message);
 		return 2;

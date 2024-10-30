@@ -22,9 +22,12 @@ public class Modem extends NetworkBase {
 
 			int port = args.toInteger(1);
 			if (rawIsOpen(port)) {
-				// Тупо сендим всем машинкам наше йоба-сообщение
+				// On envoie bêtement notre message à toutes les machines
 				for (Machine machine : Machine.list) {
-					pushModemMessageSignal(machine, machine.modemComponent.address, port, args, 2);
+					machine.modemComponents.forEach((s,modem) ->{
+						pushModemMessageSignal(machine, modem.address, port, args, 2);
+					});
+
 				}
 
 				machine.lua.pushBoolean(true);
@@ -38,8 +41,8 @@ public class Modem extends NetworkBase {
 		machine.lua.setField(-2, "broadcast");
 
 		machine.lua.pushJavaFunction(args -> {
-			args.checkInteger(1);
-			args.checkString(2);
+			args.checkInteger(2);
+			args.checkString(1);
 
 			String remoteAddress = args.toString(1);
 			int port = args.toInteger(2);
@@ -47,10 +50,11 @@ public class Modem extends NetworkBase {
 			if (rawIsOpen(port)) {
 				// Продрачиваем машинки и ищем нужную сетевуху
 				for (Machine machine : Machine.list) {
-					pushModemMessageSignal(machine, machine.modemComponent.address, port, args, 3);
-
-					machine.lua.pushBoolean(true);
-					return 1;
+					if(machine.modemComponents.containsKey(remoteAddress)) {
+						pushModemMessageSignal(machine, remoteAddress, port, args, 3);
+						machine.lua.pushBoolean(true);
+						return 1;
+					}
 				}
 			}
 
@@ -120,9 +124,13 @@ public class Modem extends NetworkBase {
 
 	@Override
 	public void pushModemMessageSignal(Machine machine, String remoteAddress, int port, LuaState message, int fromIndex) {
-		// Если удаленный писюк порт открыл
-		if (machine.modemComponent.rawIsOpen(port)) {
-			super.pushModemMessageSignal(machine, remoteAddress, port, message, fromIndex);
+		//Si le PC distant a ouvert le port
+		try {
+			if (machine.modemComponents.get(remoteAddress).rawIsOpen(port)) {
+				super.pushModemMessageSignal(machine, remoteAddress, port, message, fromIndex);
+			}
+		}catch (NullPointerException ignored){
+
 		}
 	}
 

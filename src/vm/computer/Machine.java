@@ -1,30 +1,17 @@
 package vm.computer;
 
-import javafx.animation.KeyFrame;
-import javafx.animation.KeyValue;
-import javafx.animation.Timeline;
 import javafx.application.Platform;
 import javafx.fxml.FXMLLoader;
-import javafx.geometry.Bounds;
 import javafx.scene.Scene;
-import javafx.scene.control.Button;
 import javafx.scene.control.*;
-import javafx.scene.control.TextField;
-import javafx.scene.effect.BlurType;
-import javafx.scene.effect.DropShadow;
+import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
-import javafx.scene.input.KeyCode;
-import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.AnchorPane;
-import javafx.scene.layout.ColumnConstraints;
-import javafx.scene.layout.GridPane;
 import javafx.scene.layout.VBox;
-import javafx.scene.paint.Color;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
-import javafx.util.Duration;
 import li.cil.repack.com.naef.jnlua.LuaState;
 import li.cil.repack.com.naef.jnlua.LuaStateFiveThree;
 import li.cil.repack.com.naef.jnlua.NativeSupport;
@@ -32,34 +19,31 @@ import org.apache.commons.lang3.SystemUtils;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import vm.IO;
+import vm.Main;
 import vm.computer.api.APIBase;
 import vm.computer.api.Component;
 import vm.computer.api.Computer;
 import vm.computer.api.Unicode;
 import vm.computer.components.*;
 
-import java.awt.*;
-import java.awt.datatransfer.DataFlavor;
-import java.awt.datatransfer.UnsupportedFlavorException;
 import java.io.File;
 import java.io.IOException;
 import java.util.*;
 
 public class Machine {
 	public static final ArrayList<Machine> list = new ArrayList<>();
-	private static final int screenImageViewBlurSize = 82;
-	
-	// Жабафыховские обжекты
-	public GridPane mainGridPane, screenGridPane;
+
+	// Objets de l'interface graphique
 	public AnchorPane sceneAnchorPane;
 	public VBox propertiesVBox;
 	public Slider RAMSlider, volumeSlider;
-	public ImageView screenImageView, boardImageView;
+	public ImageView boardImageView;
 	public ToggleButton powerButton;
-	public TextField EEPROMPathTextField, HDDPathTextField, tunnelChannelTextField, screensHorizontallyTextField, screensVerticallyTextField, playerTextField;
-	public Button toolbarButton, closeMachineButton;
-	
-	// Машиновская поебистика
+	public TextField EEPROMPathTextField, HDDPathTextField, playerTextField;
+
+	public int xOffset = 0, yOffset = 0;
+
+	// Fonctionnalités de la machine
 	public ArrayList<ComponentBase> componentList = new ArrayList<>();
 	public ArrayList<APIBase> APIList = new ArrayList<>();
 	
@@ -72,43 +56,43 @@ public class Machine {
 	public Unicode unicodeAPI;
 	public GPU gpuComponent;
 	public EEPROM eepromComponent;
-	public Keyboard keyboardComponent;
-	public Screen screenComponent;
+	public HashMap<String,Screen> screenComponents = new HashMap<>();
 	public vm.computer.components.Computer computerComponent;
 	public Filesystem temporaryFilesystemComponent, filesystemComponent;
-	public Modem modemComponent;
-	public Tunnel tunnelComponent;
-    public Internet internetComponent;
+	public HashMap<String,Modem> modemComponents = new HashMap<>();
+	public HashMap<String,Tunnel> tunnelComponents = new HashMap<>();
+    public HashMap<String,Internet> internetComponents = new HashMap<>();
+	public HashMap<String,Data> dataComponents = new HashMap<>();
+
+
+	public HashMap<String,UnknownComponent> unknownComponents =  new HashMap<>();
     public HashSet<String> users = new HashSet<>();
     public Player player = new Player();
     
-	private Stage stage;
-	private boolean toolbarHidden;
-	
-	// Пустой конструктор требуется FXML-ебале для инициализации
+	public Stage stage;
+
+	// Le constructeur vide est nécessaire pour l'initialisation par FXML
 	public Machine() {
 		
 	}
 
 	public static void fromJSONObject(JSONObject machineConfig) {
 		try {
-			// Ну че, создаем окошко, грузим фхмл-файл и ставим сцену окошку
+			// Crée une fenêtre, charge le fichier FXML et définit la scène pour la fenêtre
 			Stage stage = new Stage();
 			FXMLLoader fxmlLoader = new FXMLLoader(Machine.class.getResource("Window.fxml"));
 			stage.setScene(new Scene(fxmlLoader.load()));
-			stage.setMinWidth(200);
-			stage.setMinHeight(200);
-			
-			// Выдрачиваем машинку из фхмл-контроллера и запоминаем эту стейдж-залупу
+
+			// Récupère la machine à partir du contrôleur FXML et mémorise cette instance de Stage
 			Machine machine = fxmlLoader.getController();
 			machine.stage = stage;
 
-			// Создаем АПИхи
+			// Crée les APIs
 			machine.computerAPI = new Computer(machine);
 			machine.componentAPI = new Component(machine);
 			machine.unicodeAPI = new Unicode(machine);
-			
-			// Инициализируем компоненты из конфига МОШЫНЫ
+
+			// Initialise les composants à partir de la configuration de la machine
 			JSONArray components = machineConfig.getJSONArray("components");
 			JSONObject component;
 			String address;
@@ -122,10 +106,7 @@ public class Machine {
 						machine.gpuComponent.rawSetResolution(component.getInt("width"), component.getInt("height"));
 						break;
 					case "screen":
-						machine.screenComponent = new Screen(machine, address, component.getBoolean("precise"), component.getInt("blocksHorizontally"), component.getInt("blocksVertically"));
-						break;
-					case "keyboard":
-						machine.keyboardComponent = new Keyboard(machine, address);
+						machine.screenComponents.put(address,new Screen(machine, address, component.getBoolean("precise"), component.getInt("blocksHorizontally"), component.getInt("blocksVertically"), component.optString("keyboard",UUID.randomUUID().toString())));
 						break;
 					case "computer":
 						machine.computerComponent = new vm.computer.components.Computer(machine, address);
@@ -140,95 +121,73 @@ public class Machine {
 							machine.filesystemComponent = new Filesystem(machine, address, component.getString("label"), component.getString("path"), false, 12 * 1024 * 1024);
 						break;
 					case "modem":
-						machine.modemComponent = new Modem(machine, address, component.getString("wakeMessage"), component.getBoolean("wakeMessageFuzzy"));
+						machine.modemComponents.put(address,new Modem(machine, address, component.getString("wakeMessage"), component.getBoolean("wakeMessageFuzzy")));
 						break;
 					case "tunnel":
-						machine.tunnelComponent = new Tunnel(machine, address, component.getString("channel"), component.getString("wakeMessage"), component.getBoolean("wakeMessageFuzzy"));
+						machine.tunnelComponents.put(address,new Tunnel(machine, address, component.getString("channel"), component.getString("wakeMessage"), component.getBoolean("wakeMessageFuzzy")));
 						break;
 					case "internet":
-                        machine.internetComponent = new Internet(machine, address);
+                        machine.internetComponents.put(address,new Internet(machine, address));
 						break;
+					case "data":
+						machine.dataComponents.put(address,new Data(machine,address, component.optInt("tier",3)));
+						break;
+					default:
+						machine.unknownComponents.put(address,new UnknownComponent(machine,address,component.getString("type")));
 				}
 			}
 
-			// Вгондошиваем значение лимита оперативы
+			// Configure la mémoire vive
 			machine.RAMSlider.setValue(machineConfig.getDouble("totalMemory"));
-		
-			// Лоадим юзверей
+
+			// Charge les utilisateurs
 			JSONArray configUsers = machineConfig.getJSONArray("users");
 			for (int i = 0; i < configUsers.length(); i++) {
 				machine.users.add(configUsers.getString(i));
 			}
-			
-			// Пидорасим главное йоба-окошечко так, как надо
+
+			// Configure la fenêtre principale
 			machine.stage.setX(machineConfig.getDouble("x"));
 			machine.stage.setY(machineConfig.getDouble("y"));
-			machine.stage.setWidth(machineConfig.getDouble("width"));
-			machine.stage.setHeight(machineConfig.getDouble("height"));
+			machine.stage.setWidth(320);
+			machine.stage.setHeight(512);
+			machine.stage.setResizable(false);
+			machine.stage.setTitle("Computer@" + machine.computerComponent.address);
+			machine.stage.getIcons().add(new Image(Objects.requireNonNull(Main.class.getResource("resources/images/Computer.png")).toString()));
 
-			// Апдейтим контролсы
+			// Met à jour les contrôles
 			machine.playerTextField.setText(machineConfig.getString("player"));
 			machine.HDDPathTextField.setText(machine.filesystemComponent.realPath);
 			machine.EEPROMPathTextField.setText(machine.eepromComponent.realPath);
-			machine.tunnelChannelTextField.setText(machine.tunnelComponent.channel);
-			machine.screensHorizontallyTextField.setText(String.valueOf(machine.screenComponent.blocksHorizontally));
-			machine.screensVerticallyTextField.setText(String.valueOf(machine.screenComponent.blocksVertically));
 			
 			machine.volumeSlider.setValue(machineConfig.getDouble("volume"));
 			machine.onVolumeSliderPressed();
-			
-			machine.toolbarHidden = machineConfig.getBoolean("toolbarHidden");
-			machine.updateToolbar();
-			
-			// Шоб не вводили хуйнину всякую
-			machine.screensHorizontallyTextField.setTextFormatter(new TextFormatter<>(change -> {
-				if (change.getControlNewText().matches("\\d*")) {
-					String
-						w = machine.screensHorizontallyTextField.getText(),
-						h = machine.screensVerticallyTextField.getText();
-					
-					if (w.length() > 0 && h.length() > 0) {
-						machine.screenComponent.blocksHorizontally = Integer.parseInt(w);
-						machine.screenComponent.blocksVertically = Integer.parseInt(h);
-					}
-					
-					return change;
-				}
-				else {
-					return null;
-				}
-			}));
-			machine.screensHorizontallyTextField.setTextFormatter(machine.screensHorizontallyTextField.getTextFormatter());
-			
-			// А это более грамотная обработка клика на толлгеКнопку ебливую, которая вообще неадекватно реагирует по дефолту
+
+
+
+			// Gère le clic sur le bouton d'alimentation
 			machine.powerButton.addEventFilter(MouseEvent.MOUSE_PRESSED, event -> {
 				event.consume();
 
-				machine.player.play(machine.player.powerButtonClicked);
+				//machine.player.play(machine.player.powerButtonClicked);
 				
 				if (machine.started)
 					machine.shutdown();
 				else
 					machine.boot();
 			});
-			
-			// Приходится ебошить тень вручную, т.к. иначе оно оперирует баундсами, которые поганят скрин-ивенты
-			DropShadow effect = new DropShadow(BlurType.THREE_PASS_BOX, Color.rgb(0, 0, 0, 0.5), 0, 0, 0, 0);
-			effect.setWidth(screenImageViewBlurSize + 2);
-			effect.setHeight(screenImageViewBlurSize + 2);
-			machine.screenImageView.setEffect(effect);
 
-			// При закрытии окошка машину над оффнуть, а то хуй проссыт, будет ли там поток дрочиться или плеер этот асинхронники свои сувать меж булок
+
+
+			// Gère la fermeture de la fenêtre
 			stage.setOnCloseRequest(event -> machine.onWindowClosed());
-			
-			// Авторесайз пикчи, чтоб охуенно и пиздато все было
-			machine.screenGridPane.widthProperty().addListener((observable, oldValue, newValue) -> machine.checkImageViewBingings());
-			machine.screenGridPane.heightProperty().addListener((observable, oldValue, newValue) -> machine.checkImageViewBingings());
-			
-			// Запоминаем мошынку в гулаг-перечне мошынок
+
+
+
+			// Ajoute la machine à la liste des machines
 			list.add(machine);
-			
-			// Акошычко гатово
+
+			// Affiche la fenêtre
 			stage.show();
 		}
 		catch (IOException e) {
@@ -238,95 +197,102 @@ public class Machine {
 
 	public static void generate() {
 		try {
-			System.out.println("Generating new machine...");
-			
-			// Грузим дефолтный конфиг машины и создаем жсон на его основе
+			System.out.println("Génération d'une nouvelle machine...");
+
+			// Charge la configuration par défaut de la machine et crée un JSON basé dessus
 			JSONObject machineConfig = new JSONObject(IO.loadResourceAsString("resources/defaults/Machine.json"));
-			
-			// Пушим в него имечко юзверя
+
+			// Ajoute le nom de l'utilisateur à la configuration
 			machineConfig.put("player", System.getProperty("user.name"));
-			
-			// Создаем основной путь всей вирт. машины
+
+			// Crée le chemin principal de la machine virtuelle
 			File machineFile;
 			int counter = 0;
 			do {
 				machineFile = new File(IO.machinesFile, "Machine" + counter++);
 			} while (machineFile.exists());
 
-			// Продрачиваем дефолтные компоненты
+			// Initialise les composants par défaut
 			String address, type, filesystemAddress = null;
 			JSONObject component;
 			JSONArray components = machineConfig.getJSONArray("components");
 			for (int i = 0; i < components.length(); i++) {
 				component = components.getJSONObject(i);
 				type = component.getString("type");
-				
-				// Генерим рандомный адрес
+
+				// Génère une adresse aléatoire
 				address = UUID.randomUUID().toString();
 				component.put("address", address);
 
-				// Вот тута стопэ.
+				// Traitement spécifique
 				if (type.equals("filesystem")) {
-					// Если это временная файлосистема, то въебываем ей соответствующий реальный путь
+					// Si c'est un système de fichiers temporaire, définit le chemin réel correspondant
 					if (component.getBoolean("temporary")) {
 						File temporaryFile = new File(machineFile, "Temporary");
 						temporaryFile.mkdirs();
-						
+
 						component.put("path", temporaryFile.getPath());
 					}
-					// А если это обычный хард, то запоминаем его адрес, чтоб потом его в биос дату вхуячить
+					// Sinon, mémorise son adresse pour l'utiliser ultérieurement dans les données BIOS
 					else {
 						filesystemAddress = address;
-						
-						// Создаем хуйню под хард
+
+						// Crée l'espace de stockage pour le disque dur
 						File HDDFile = new File(machineFile, "HDD");
 						HDDFile.mkdirs();
-						
-						// Анпачим опенось
-						System.out.println("Copying OpenOS sources...");
+
+						// Copie les sources de OpenOS
+						System.out.println("Copie des sources de OpenOS...");
 						IO.unzipResource("resources/defaults/OpenOS.zip", HDDFile);
-						
+
 						component.put("path", HDDFile.getPath());
 					}
 				}
-				// И рандомный канал компонента линкед карты
+				// Génère un canal aléatoire pour le composant de tunnel
 				else if (type.equals("tunnel")) {
 					component.put("channel", UUID.randomUUID().toString());
 				}
 			}
 
-			// А терь ищем еепром и сеттим ему полученный адрес харда
+			// Associe le disque dur à l'EEPROM
 			for (int i = 0; i < components.length(); i++) {
 				component = components.getJSONObject(i);
 
 				if (component.getString("type").equals("eeprom")) {
 					File EEPROMFile = new File(machineFile, "EEPROM.lua");
 
-					// Сейвим инфу с загрузочным адресом еепрома
+					// Enregistre l'adresse du système de fichiers dans les données de l'EEPROM
 					component.put("data", filesystemAddress);
 					component.put("path", EEPROMFile.getPath());
-					
-					// Копипиздим EEPROM.lua с ресурсов
+
+					// Copie le fichier EEPROM.lua depuis les ressources
 					IO.copyResourceToFile("resources/defaults/EEPROM.lua", EEPROMFile);
 					break;
 				}
 			}
 
-			// Усе, уася, готова машинка
+			// La machine est prête
 			Machine.fromJSONObject(machineConfig);
 
-			// Сейвим на всякий
+			// Enregistre au cas où
 			IO.saveConfig();
 		}
 		catch (IOException e) {
 			e.printStackTrace();
 		}
 	}
-	
+
+
 	public JSONObject toJSONObject() {
 		JSONArray components = new JSONArray();
-		for (ComponentBase component : componentList)
-			components.put(component.toJSONObject());
+		for (ComponentBase component : componentList){
+			JSONObject obj = component.toJSONObject();
+			if(obj != null) {
+				components.put(obj);
+			}
+		}
+
+
 		
 		JSONArray configUsers = new JSONArray();
 		for (String user : users)
@@ -337,46 +303,11 @@ public class Machine {
 			.put("y", stage.getY())
 			.put("width", stage.getWidth())
 			.put("height", stage.getHeight())
-			.put("toolbarHidden", toolbarHidden)
 			.put("components", components)
 			.put("totalMemory", RAMSlider.getValue())
 			.put("player", playerTextField.getText())
 			.put("volume", volumeSlider.getValue())
 			.put("users", configUsers);
-	}
-
-	public String getClipboard() {
-		try {
-			return (String) Toolkit.getDefaultToolkit().getSystemClipboard().getData(DataFlavor.stringFlavor);
-		}
-		catch (HeadlessException | IOException | UnsupportedFlavorException e) {
-			e.printStackTrace();
-		}
-		
-		return "";
-	}
-	
-	public void checkImageViewBingings() {
-		double
-			width = screenGridPane.getWidth(),
-			height = screenGridPane.getHeight();
-		screenImageView.setFitWidth(width > gpuComponent.GlyphWIDTHMulWidth ? gpuComponent.GlyphWIDTHMulWidth : width);
-		screenImageView.setFitHeight(height > gpuComponent.GlyphHEIGHTMulHeight ? gpuComponent.GlyphHEIGHTMulHeight : height);
-	}
-	
-	private void updateToolbar() {
-		ColumnConstraints columnConstraints = mainGridPane.getColumnConstraints().get(1);
-		
-		new Timeline(
-			new KeyFrame(Duration.ZERO,
-				new KeyValue(columnConstraints.prefWidthProperty(), columnConstraints.getPrefWidth()),
-				new KeyValue(toolbarButton.textProperty(), toolbarButton.getText())
-			),
-			new KeyFrame(new Duration(100),
-				new KeyValue(columnConstraints.prefWidthProperty(), toolbarHidden ? 0 : boardImageView.getFitWidth()),
-				new KeyValue(toolbarButton.textProperty(), toolbarHidden ? "<" : ">")
-			)
-		).play();
 	}
 
 	private void error(String text) {
@@ -386,12 +317,6 @@ public class Machine {
 		shutdown();
 	}
 	
-	public void onToolbarButtonPressed() {
-		toolbarHidden = !toolbarHidden;
-		updateToolbar();
-		screenImageView.requestFocus();
-	}
-	
 	public void onGenerateButtonPressed() {
 		generate();
 	}
@@ -399,12 +324,12 @@ public class Machine {
 	private void onWindowClosed() {
 		shutdown();
 		gpuComponent.updaterThread.interrupt();
-	}
 
-	public void onCloseMachineButtonPressed() {
-		onWindowClosed();
-		list.remove(this);
-		stage.close();
+		componentList.forEach((componentBase -> {
+			if (componentBase instanceof ComponentWindowed){
+				((ComponentWindowed) componentBase).closeScreenWindows();
+			}
+		}));
 	}
 	
 	public void onVolumeSliderPressed() {
@@ -413,7 +338,7 @@ public class Machine {
 
 	public static class LuaStateFactory {
 		private static class Architecture {
-			private static String OS_ARCH = System.getProperty("os.arch");
+			private static final String OS_ARCH = System.getProperty("os.arch");
 			private static boolean isOSArchMatch(String archPrefix) {
 				return OS_ARCH != null && OS_ARCH.startsWith(archPrefix);
 			}
@@ -431,20 +356,20 @@ public class Machine {
 				if (SystemUtils.IS_OS_FREE_BSD) extension = "bsd.so";
 				else if (SystemUtils.IS_OS_LINUX) extension = "so";
 				else if (SystemUtils.IS_OS_MAC) extension = "dylib";
-				
+
 				if (Architecture.IS_OS_X64) architecture = "64";
 				else if (Architecture.IS_OS_X86) architecture = "32";
 				else if (Architecture.IS_OS_ARM) architecture = "32.arm";
 
-				// Финальное, так сказать, название либсы-хуибсы
+				// Le nom final de la bibliothèque
 				String libraryPath = "lua" + (use53 ? "53" : "52") + "/native." + architecture + "." + extension;
-				
-				// Копипиздим либу из ресурсов, если ее еще нет
+
+				// Copie la bibliothèque depuis les ressources si elle n'existe pas encore
 				File libraryFile = new File(IO.librariesFile, libraryPath);
 				if (!libraryFile.exists()) {
 					try {
-						System.out.println("Unpacking library: " + libraryPath);
-						
+						System.out.println("Décompression de la bibliothèque : " + libraryPath);
+
 						libraryFile.mkdirs();
 						IO.copyResourceToFile("libraries/" + libraryPath, libraryFile);
 					}
@@ -452,12 +377,13 @@ public class Machine {
 						e.printStackTrace();
 					}
 				}
-				
-				// Грузим ее, НАКАНЕЦТА
-				System.out.println("Loading library: " + libraryFile.getPath());
+
+				// Charge la bibliothèque
+				System.out.println("Chargement de la bibliothèque : " + libraryFile.getPath());
 				System.load(libraryFile.getPath());
 			});
 		}
+
 
 		public static LuaState load52() {
 			prepareLoad(false);
@@ -502,19 +428,17 @@ public class Machine {
 	public class LuaThread extends Thread {
 		public boolean shuttingDown = false;
 		
-		private LuaState[] signalStack = new LuaState[256];
-		private int lastOCPixelClickX, lastOCPixelClickY;
+		private final LuaState[] signalStack = new LuaState[256];
 
-		private HashMap<KeyCode, String> codes = new HashMap<>();
-		private KeyCode lastCode;
-		private Timer keyDownRepeater;
+
+
 
 		@Override
 		public void run() {
-			// Инициализируем корректную Lua-машину
+			// Initialise la machine Lua correctement
 			lua = LuaStateFactory.load52();
 
-			// Добавим логгер, чтоб дебажить потом проще было 
+			// Ajoute un journal pour faciliter le débogage
 			lua.pushJavaFunction(args -> {
 				String separator = "   ";
 				StringBuilder result = new StringBuilder();
@@ -528,111 +452,45 @@ public class Machine {
 						case TABLE: result.append("table"); result.append(separator); break;
 						case FUNCTION: result.append("function"); result.append(separator); break;
 						case THREAD: result.append("thread"); result.append(separator); break;
-						case LIGHTUSERDATA: result.append("userdata"); result.append(separator); break;
-						case USERDATA: result.append("userdata"); result.append(separator); break;
+						case LIGHTUSERDATA:
+						case USERDATA:
+							result.append("userdata"); result.append(separator); break;
 					}
 				}
-				System.out.println(result.toString());
+				System.out.println(result);
 
 				return 0;
 			});
 			lua.setGlobal("LOG");
 
-			// Пушим все апихи
+			// Ajoute tous les API
 			for (APIBase api : APIList) {
 				api.pushTable();
 			}
 
-			// Пушим все компоненты
+			// Ajoute tous les composants
 			for (ComponentBase component : componentList) {
 				component.pushProxy();
 			}
 
 			Platform.runLater(() -> {
-				// Фокусирование экрана при клике на эту злоебучую область
-				mainGridPane.setOnMousePressed(event -> screenImageView.requestFocus());
-				
-				// Ивенты клавиш всему окну
-				mainGridPane.setOnKeyPressed(event -> {
-//					System.out.println("PRESSED: " + event.getCharacter() + ", " + event.getText() + ", " + event.getCode());
 
-					lastCode = event.getCode();
-					
-					// Системная клавиша никогда не приведет к KeyTyped-ивенту
-					if (event.getText().length() == 0) {
-						codes.put(lastCode, "");
-						pushKeyDownSignalRepeated(lastCode, "");
-					}
-				});
-
-				// Этот ивент всегда следует сразу за KeyPressed в случае несистемных клавиш
-				mainGridPane.setOnKeyTyped(event -> {
-					if (!codes.containsKey(lastCode)) {
-//						System.out.println("TYPED: " + event.getCharacter() + ", " + event.getText() + ", " + event.getCode());
-
-						String character = event.getCharacter();
-						codes.put(lastCode, character);
-						pushKeyDownSignalRepeated(lastCode, character);
-					}
-				});
-
-				mainGridPane.setOnKeyReleased(event -> {
-//					System.out.println("RELEASED: " + event.getCharacter() + ", " + event.getText() + ", " + event.getCode());
-					
-					KeyCode keyCode = event.getCode();
-					if (codes.containsKey(keyCode)) {
-						pushKeySignal(keyCode, codes.get(keyCode), "key_up");
-						codes.remove(keyCode);
-						cancelKeyRepetition();
-					}
-				});
-
-				// А эт уже ивенты тача, драга и прочего конкретно на экранной хуйне этой
-				screenImageView.setOnMousePressed(event -> {
-					// Сигнал вставки из буфера обмена
-					if (event.getButton() == MouseButton.MIDDLE) {
-						LuaState luaState = new LuaState();
-						
-						luaState.pushString("clipboard");
-						luaState.pushString(keyboardComponent.address);
-						luaState.pushString(getClipboard());
-						luaState.pushString(playerTextField.getText());
-						
-						pushSignal(luaState);
-					}
-					else
-						pushTouchSignal(event.getSceneX(), event.getSceneY(), getOCButton(event), "touch", true);
-				});
-
-				screenImageView.setOnMouseDragged(event -> {
-					if (event.getButton() != MouseButton.MIDDLE)
-						pushTouchSignal(event.getSceneX(), event.getSceneY(), getOCButton(event), "drag", false);
-				});
-
-				screenImageView.setOnMouseReleased(event -> {
-					if (event.getButton() != MouseButton.MIDDLE)
-						pushTouchSignal(event.getSceneX(), event.getSceneY(), getOCButton(event), "drop", true);
-				});
-
-				screenImageView.setOnScroll(event -> {
-					pushTouchSignal(event.getSceneX(), event.getSceneY(), event.getDeltaY() > 0 ? 1 : -1, "scroll", true);
-				});
 			});
-			
+
 			try {
-				// Грузим машин-кодыч
+				// Charge le code de la machine Lua
 				lua.setTotalMemory((int) (RAMSlider.getValue() * 1024 * 1024));
 				lua.load(IO.loadResourceAsString("resources/Machine.lua"), "=machine");
 				lua.call(0, 0);
 
-				error("computer halted");
+				error("ordinateur arrêté");
 			}
 			catch (Exception e) {
 				if (shuttingDown) {
-					System.out.println("Shutting down normally");
-					// Чистим экран исключительно по завершению процесса луа
-					// Иначе может возникнуть случай, когда экран уже очищен для выключения,
-					// а процесс луа еще дорабатывает остатки и рисует хуйню на экране
+					System.out.println("Arrêt normal");
+					// Efface l'écran uniquement après la fin du processus Lua
+					// Sinon, il peut y avoir un cas où l'écran est déjà effacé pour l'arrêt,
+					// mais le processus Lua continue de dessiner sur l'écran
 					gpuComponent.flush();
 					gpuComponent.updaterThread.update();
 				}
@@ -642,86 +500,12 @@ public class Machine {
 			}
 		}
 
-		// Отменяем многократное повторение клавиш
-		private void cancelKeyRepetition() {
-			if (keyDownRepeater != null) {
-				keyDownRepeater.cancel();
-				keyDownRepeater.purge();
-			}
-		}
-		
-		// Эта хуйнинка стартует многократное повторение ивента нажатой клавишии
-		private void pushKeyDownSignalRepeated(KeyCode keyCode, String text) {
-			pushKeySignal(keyCode, text, "key_down");
-	
-			cancelKeyRepetition();
-			keyDownRepeater = new Timer();
-			keyDownRepeater.schedule(new TimerTask() {
-				@Override
-				public void run() {
-					pushKeySignal(keyCode, text, "key_down");
-				}
-			}, 500, 50);
-		}
-		
-		private void pushKeySignal(KeyCode keyCode, String text, String name) {
-			KeyMap.OCKey ocKey = KeyMap.get(keyCode);
+		// Annule la répétition multiple des touches
 
-			LuaState luaState = new LuaState();
-			luaState.pushString(name);
-			luaState.pushString(keyboardComponent.address);
-			luaState.pushInteger(text.length() > 0 ? text.codePointAt(0) : ocKey.unicode);
-			luaState.pushInteger(ocKey.ascii);
-			luaState.pushString(playerTextField.getText());
-			
-			pushSignal(luaState);
-		}
 
-		private int getOCButton(MouseEvent event) {
-			switch (event.getButton()) {
-				case SECONDARY: return 1;
-				default: return 0;
-			}
-		}
 
-		private void pushTouchSignal(double sceneX, double sceneY, int state, String name, boolean notDrag) {
-			Bounds bounds = screenImageView.getBoundsInLocal();
-			double
-				p1 = (bounds.getWidth() - screenImageViewBlurSize) / gpuComponent.GlyphWIDTHMulWidth,
-				p2 = (bounds.getHeight() - screenImageViewBlurSize) / gpuComponent.GlyphHEIGHTMulHeight;
 
-//			System.out.println(bounds.getWidth() + ", " + bounds.getHeight() + ", " + screenImageView.getFitWidth() + ", " + screenImageView.getFitHeight());
-			
-			double
-				x = (sceneX - screenImageView.getLayoutX()) / p1 / Glyph.WIDTH + 1,
-				y = (sceneY - screenImageView.getLayoutY()) / p2 / Glyph.HEIGHT + 1;
-			
-			int OCPixelClickX = (int) x;
-			int OCPixelClickY = (int) y;
-			
-//			System.out.println("Pushing touch signal: " + x + ", " + y);
-			if (notDrag || OCPixelClickX != lastOCPixelClickX || OCPixelClickY != lastOCPixelClickY) {
-				
-				LuaState luaState = new LuaState();
-				luaState.pushString(name);
-				luaState.pushString(screenComponent.address);
-				if (screenComponent.precise) {
-					luaState.pushNumber(x);
-					luaState.pushNumber(y);
-				}
-				else {
-					luaState.pushInteger(OCPixelClickX);
-					luaState.pushInteger(OCPixelClickY);
-				}
-				luaState.pushInteger(state);
-				luaState.pushString(playerTextField.getText());
-				
-				pushSignal(luaState);
-			}
 
-			lastOCPixelClickX = OCPixelClickX;
-			lastOCPixelClickY = OCPixelClickY;
-		}
 
 		public void pushSignal(LuaState signal) {
 			int nullIndex = -1;
@@ -777,7 +561,7 @@ public class Machine {
 								wait(howMuchToWait);
 						}
 						catch (ThreadDeath | InterruptedException e) {
-							System.out.println("Поток интерруптнулся чет у компа");
+							System.out.println("Le thread a été interrompu chez l'ordinateur.");
 						}
 					}
 				}
@@ -811,13 +595,12 @@ public class Machine {
 					System.out.println("Loading EEPROM from " + eepromComponent.realPath);
 					eepromComponent.code = IO.loadFileAsByteArray(EEPROMFile.toURI());
 					
-					// Экранчик надо чистить, а то вдруг там бсод закрался
+					// Il faut nettoyer l'écran, au cas où un écran bleu de la mort se serait glissé.
 					gpuComponent.flush();
 					gpuComponent.updaterThread.update();
 
 					propertiesVBox.setDisable(true);
 					powerButton.setSelected(true);
-					screenImageView.requestFocus();
 					player.play(player.computerRunning);
 
 					luaThread = new LuaThread();
