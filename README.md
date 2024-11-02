@@ -11,10 +11,14 @@ Here's list of features for this moment:
 * Cross-VM modem messsaging
 * Toolbar hiding for best experience
 * Loading/saving VMs with all component addresses, paths, etc.
+* Data card component implementation
+* multiple same components
 
 Planned:
 * Lua architecture switching
-* Data card component implementation
+* a store to dowload components
+* a VS-Code extention to run lua programme in the VM
+* supprt all componnent 
 
 Development is still in progress. But you can try the latest build located in /out/ directory without any guarantees :3
 
