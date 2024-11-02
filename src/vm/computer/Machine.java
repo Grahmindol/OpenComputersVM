@@ -63,6 +63,7 @@ public class Machine {
 	public HashMap<String,Tunnel> tunnelComponents = new HashMap<>();
     public HashMap<String,Internet> internetComponents = new HashMap<>();
 	public HashMap<String,Data> dataComponents = new HashMap<>();
+	public HashMap<String,Keyboard> keyboardComponents= new HashMap<>();
 
 
 	public HashMap<String,UnknownComponent> unknownComponents =  new HashMap<>();
@@ -131,6 +132,9 @@ public class Machine {
 						break;
 					case "data":
 						machine.dataComponents.put(address,new Data(machine,address, component.optInt("tier",3)));
+						break;
+					case "keyboard":
+						machine.keyboardComponents.put(address,new Keyboard(machine,address));
 						break;
 					default:
 						machine.unknownComponents.put(address,new UnknownComponent(machine,address,component.getString("type")));

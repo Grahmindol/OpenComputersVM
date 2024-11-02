@@ -17,6 +17,7 @@ public class Internet extends ComponentBase {
 		super(machine, address, "internet");
 	}
 
+	@SuppressWarnings("unchecked")
 	@Override
 	public void pushProxyFields() {
 		super.pushProxyFields();
@@ -88,8 +89,8 @@ public class Internet extends ComponentBase {
 					catch (IOException ignored) {}
 					finally {
 						machine.lua.pushBoolean(true);
-						return 1;
 					}
+					return 1;
 				});
 				machine.lua.setField(-2, "close");
 
@@ -117,7 +118,7 @@ public class Internet extends ComponentBase {
 				
 				// Подрубаем хедеры
 				if (!requestArgs.isNoneOrNil(3) && requestArgs.isTable(3)) {
-					requestArgs.toJavaObject(3, Map.class).forEach((key, value) -> {
+					((Map<String, String>) requestArgs.toJavaObject(3, Map.class)).forEach((key, value) -> {
 //						System.out.println("Setting header: "+ key.toString() + " : " + value.toString());
 						connection.setRequestProperty(key.toString(), value.toString());
 					});
@@ -180,8 +181,8 @@ public class Internet extends ComponentBase {
 					catch (IOException ignored) {}
 					finally {
 						machine.lua.pushBoolean(true);
-						return 1;
 					}
+					return 1;
 				});
 				machine.lua.setField(-2, "close");
 
