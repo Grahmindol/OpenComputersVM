@@ -18,7 +18,9 @@ Planned:
 * Lua architecture switching
 * a store to dowload components
 * a VS-Code extention to run lua programme in the VM
-* supprt all componnent 
+* supprt all componnent of the site [https://ocandcoluadoc.ddns.net/]
+* add drone/robot/microcontroler vm
+
 
 Development is still in progress. But you can try the latest build located in /out/ directory without any guarantees :3
 
