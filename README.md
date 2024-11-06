@@ -1,4 +1,4 @@
-This shit allows you to creat OpenComputers virtual machines and precisely emulate player interactions with them as it would be in Minecraft world
+This allows you to creat OpenComputers virtual machines and precisely emulate player interactions with them as it would be in Minecraft world
 
 Here's list of features for this moment:
 * One click VM generation that comes with pre-configured OpenOS by default
