@@ -96,6 +96,7 @@ public class ScreenController {
 
         // Gestion des événements de toucher et de glisser sur l'écran
         screenImageView.setOnMousePressed(event -> {
+            if(machine.luaThread == null) return;
             // Signal de collage depuis le presse-papiers
             if (event.getButton() == MouseButton.MIDDLE) {
                 LuaState luaState = new LuaState();
@@ -136,6 +137,7 @@ public class ScreenController {
     }
 
     private void pushKeySignal(KeyCode keyCode, String text, String name) {
+        if(machine.luaThread == null) return;
         KeyMap.OCKey ocKey = KeyMap.get(keyCode);
 
         LuaState luaState = new LuaState();
@@ -189,6 +191,7 @@ public class ScreenController {
     }
 
     private void pushTouchSignal(double sceneX, double sceneY, int state, String name, boolean notDrag) {
+        if(machine.luaThread == null) return;
         Bounds bounds = screenImageView.getBoundsInLocal();
         double
                 p1 = (bounds.getWidth() - screenImageViewBlurSize) / this.GlyphWIDTHMulWidth,

@@ -63,7 +63,7 @@ public class Internet extends ComponentBase {
 				});
 				machine.lua.setField(-2, "read");
 
-				// Запись в сокет
+				// Write to socket
 				machine.lua.pushJavaFunction(readArgs -> {
 					try {
 						byte[] data = readArgs.checkByteArray(1);
@@ -79,7 +79,7 @@ public class Internet extends ComponentBase {
 				});
 				machine.lua.setField(-2, "write");
 
-				// Закрытие сокета
+				// Closing a socket
 				machine.lua.pushJavaFunction(args -> {
 					try {
 						socket.close();
@@ -94,7 +94,7 @@ public class Internet extends ComponentBase {
 				});
 				machine.lua.setField(-2, "close");
 
-				// Какая-то хуйня, видимо, для чека статуса соединения, хз
+				// check the connection status
 				machine.lua.pushJavaFunction(args -> {
 					machine.lua.pushBoolean(socket.isConnected());
 					return 1;
@@ -116,7 +116,7 @@ public class Internet extends ComponentBase {
 
 				connection.setDoInput(true);
 				
-				// Подрубаем хедеры
+				// We cut the headers
 				if (!requestArgs.isNoneOrNil(3) && requestArgs.isTable(3)) {
 					((Map<String, String>) requestArgs.toJavaObject(3, Map.class)).forEach((key, value) -> {
 //						System.out.println("Setting header: "+ key.toString() + " : " + value.toString());
@@ -124,7 +124,7 @@ public class Internet extends ComponentBase {
 					});
 				}
 				
-				// Подрубаем метод запроса
+				// We hook up the request method
 				if (!requestArgs.isNoneOrNil(2)) {
 					String postData = requestArgs.checkString(2);
 
@@ -141,12 +141,12 @@ public class Internet extends ComponentBase {
 					connection.setRequestMethod("GET");
 				}
 
-				// Подрубаем читалку
+				// We're hooking up the reader
 				InputStream inputStream = connection.getInputStream();
 				
 				machine.lua.newTable();
 				
-				// Чтение из http request
+				// Reading from http request
 				machine.lua.pushJavaFunction(readArgs -> {
 					try {
 //						System.out.println(", available: " + inputStream.available());
@@ -172,7 +172,7 @@ public class Internet extends ComponentBase {
 				});
 				machine.lua.setField(-2, "read");
 
-				// Закрытие http request
+				// Closing http request
 				machine.lua.pushJavaFunction(args -> {
 					try {
 						inputStream.close();
@@ -186,10 +186,20 @@ public class Internet extends ComponentBase {
 				});
 				machine.lua.setField(-2, "close");
 
-				// Закрытие http request
+				// check the connection status
+				machine.lua.pushJavaFunction(args -> {
+					try {
+						machine.lua.pushBoolean(connection.getResponseCode() > 0);
+					} catch (IOException e) {
+						machine.lua.pushBoolean(false);
+					}
+					return 1;
+				});
+				machine.lua.setField(-2, "finishConnect");
+
+				// Closing http request
 				machine.lua.pushJavaFunction(readArgs -> {
 					try {
-						// Пушим код и текст
 						machine.lua.pushInteger(connection.getResponseCode());
 						machine.lua.pushString(connection.getResponseMessage());
 

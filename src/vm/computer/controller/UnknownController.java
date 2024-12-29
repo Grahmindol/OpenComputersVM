@@ -76,6 +76,7 @@ public class UnknownController {
     }
 
     private String processInput(String input) {
+        if(machine.luaThread == null) return "Error : please run the computer";
         // Implement your own logic to process the input
         String[] tokens = input.split("\\s+");
 
@@ -98,15 +99,15 @@ public class UnknownController {
                     i++;
                 }
                 machine.luaThread.pushSignal(luaState);
-                return "Event pushed";
+                return "Info  : Event pushed";
             } else {
                 return "Error : require event name";
             }
         }if (readeText == null){
             readeText = input;
-            return "answer sent !";
+            return "Info  : Answer pushed !";
         }
-        return "unknown command";
+        return "Error : Unknown command";
     }
 
     public void print(String txt) {

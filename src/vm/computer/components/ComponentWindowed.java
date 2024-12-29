@@ -25,6 +25,11 @@ public class ComponentWindowed extends ComponentBase{
         machine.xOffset += 50;
         machine.yOffset += 50;
 
+        //stage.setAlwaysOnTop(true);
+        machine.stage.focusedProperty().addListener((observable, oldValue, newValue) -> {
+            if(newValue) stage.setAlwaysOnTop(true);
+            stage.setAlwaysOnTop(false);
+        });
 
         stage.setOnCloseRequest(Event::consume);
         stage.show();
