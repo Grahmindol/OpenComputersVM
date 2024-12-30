@@ -2,6 +2,7 @@ package vm.computer.components;
 
 import org.json.JSONObject;
 import vm.computer.Machine;
+import vm.computer.components.base.ComponentBase;
 
 import javax.crypto.*;
 import javax.crypto.spec.IvParameterSpec;
@@ -25,10 +26,10 @@ public class Data extends ComponentBase{
 
     private SecureRandom secureRandom = new SecureRandom();
 
-    public Data(Machine machine, String address, int tier) {
-        super(machine, address, "data");
+    public Data(Machine machine, String address, JSONObject obj) {
+        super(machine, address, obj);
 
-        this.tier = tier;
+        this.tier = obj.optInt("tier",3);
     }
 
     @Override

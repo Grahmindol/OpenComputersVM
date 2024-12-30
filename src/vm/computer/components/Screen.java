@@ -5,10 +5,10 @@ import javafx.scene.Scene;
 import org.json.JSONObject;
 import vm.computer.LuaUtils;
 import vm.computer.Machine;
+import vm.computer.components.base.ComponentWindowed;
 import vm.computer.controller.ScreenController;
 
 import java.io.IOException;
-import java.util.Objects;
 
 public class Screen extends ComponentWindowed {
 
@@ -17,32 +17,30 @@ public class Screen extends ComponentWindowed {
 
 	public ScreenController controller;
 
-	public Keyboard keyboard;
+	public String keyboard;
 
 
 
 
 
-	public Screen(Machine machine, String address, boolean precise, int blocksHorizontally, int blocksVertically, String kb) throws IOException {
-		super(machine, address, "screen");
-
+	public Screen(Machine machine, String address, JSONObject obj) throws IOException {
+		super(machine, address, obj);
 		controller = new ScreenController(machine,address);
+
+		this.keyboard = obj.optString("keyboard",null);
+		this.precise = obj.optBoolean("precise",false);
+		this.blocksHorizontally = obj.optInt("blocksHorizontally",1);
+		this.blocksVertically = obj.optInt("blocksVertically",1);
+		this.isOn = true;
 
 		FXMLLoader fxmlLoader = new FXMLLoader(Machine.class.getResource("screen.fxml"));
 		fxmlLoader.setController(controller);
-		if (!Objects.equals(kb, "null")) {
-			stage.setTitle("Screen@" + address + " | Keyboard@" + kb);
-			this.keyboard = new  Keyboard(machine, kb);
+		if (keyboard != null) {
+			stage.setTitle("Screen@" + address + " | Keyboard@" + this.keyboard);
 		}else {
 			stage.setTitle("Screen@" + address);
-			this.keyboard = null;
 		}
-
 		stage.setScene(new Scene(fxmlLoader.load()));
-		this.precise = precise;
-		this.blocksHorizontally = blocksHorizontally;
-		this.blocksVertically = blocksVertically;
-		this.isOn = true;
 	}
 
 
@@ -65,7 +63,7 @@ public class Screen extends ComponentWindowed {
 			int tableIndex = machine.lua.getTop();
 			if (keyboard != null) {
 				machine.lua.pushInteger(1);
-				machine.lua.pushString(this.keyboard.address);
+				machine.lua.pushString(this.keyboard);
 				machine.lua.setTable(tableIndex);
 			}
 
@@ -120,6 +118,6 @@ public class Screen extends ComponentWindowed {
 				.put("precise", precise)
 				.put("blocksHorizontally", blocksHorizontally)
 				.put("blocksVertically", blocksVertically)
-				.put("keyboard",keyboard.address);
+				.put("keyboard",keyboard);
 	}
 }

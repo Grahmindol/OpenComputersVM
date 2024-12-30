@@ -13,6 +13,7 @@
     },
     {
       "type": "screen",
+      "keyboard" : "ae85cba9-054d-4adf-ae44-7d32d732f958",
       "precise": false,
       "blocksHorizontally": 3,
       "blocksVertically": 2

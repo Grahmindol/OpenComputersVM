@@ -9,10 +9,11 @@ import org.json.JSONObject;
 import vm.computer.Glyph;
 import vm.computer.LuaUtils;
 import vm.computer.Machine;
+import vm.computer.components.base.ComponentBase;
 
 import java.nio.IntBuffer;
 
-public class GPU extends ComponentBase {
+public class Gpu extends ComponentBase {
 	public static class Color {
 		static final Color
 			BLACK = new Color(0x000000),
@@ -157,10 +158,11 @@ public class GPU extends ComponentBase {
 
 	private String BindedScreenAddr = "";
 
-	public GPU(Machine machine, String address) {
-		super(machine, address,"gpu");
+	public Gpu(Machine machine, String address, JSONObject obj) {
+		super(machine, address,obj);
 		
 		updaterThread.start();
+		this.rawSetResolution(obj.optInt("width",80), obj.optInt("height",25));
 	}
 
 	@Override
@@ -459,11 +461,11 @@ public class GPU extends ComponentBase {
 
 		// And then we can insert it into the widget.
 		try {
-
-			machine.screenComponents.get(BindedScreenAddr).controller.screenImageView.setImage(writableImage);
-			machine.screenComponents.get(BindedScreenAddr).controller.setGlyphMul(GlyphWIDTHMulWidth,GlyphHEIGHTMulHeight);
+			
+			((Screen)machine.listComponents.get("screen").get(BindedScreenAddr)).controller.screenImageView.setImage(writableImage);
+			((Screen)machine.listComponents.get("screen").get(BindedScreenAddr)).controller.setGlyphMul(GlyphWIDTHMulWidth,GlyphHEIGHTMulHeight);
 			// And check the dimensions.
-			machine.screenComponents.get(BindedScreenAddr).controller.checkImageViewBindings();
+			((Screen)machine.listComponents.get("screen").get(BindedScreenAddr)).controller.checkImageViewBindings();
 		}catch (NullPointerException ignored){
 
 		}

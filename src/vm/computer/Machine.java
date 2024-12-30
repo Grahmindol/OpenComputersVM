@@ -18,6 +18,7 @@ import li.cil.repack.com.naef.jnlua.NativeSupport;
 import org.apache.commons.lang3.SystemUtils;
 import org.json.JSONArray;
 import org.json.JSONObject;
+
 import vm.IO;
 import vm.Main;
 import vm.computer.api.APIBase;
@@ -25,9 +26,13 @@ import vm.computer.api.Component;
 import vm.computer.api.Computer;
 import vm.computer.api.Unicode;
 import vm.computer.components.*;
+import vm.computer.components.base.ComponentBase;
+import vm.computer.components.base.ComponentWindowed;
+import vm.computer.components.base.UnknownComponent;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Constructor;
 import java.util.*;
 
 public class Machine {
@@ -44,9 +49,8 @@ public class Machine {
 	public int xOffset = 0, yOffset = 0;
 
 	// Fonctionnalités de la machine
-	public ArrayList<ComponentBase> componentList = new ArrayList<>();
 	public ArrayList<APIBase> APIList = new ArrayList<>();
-	
+
 	public boolean started = false;
 	public long startTime;
 	public LuaState lua;
@@ -54,27 +58,25 @@ public class Machine {
 	public Component componentAPI;
 	public Computer computerAPI;
 	public Unicode unicodeAPI;
-	public GPU gpuComponent;
-	public EEPROM eepromComponent;
-	public HashMap<String,Screen> screenComponents = new HashMap<>();
-	public vm.computer.components.Computer computerComponent;
-	public Filesystem temporaryFilesystemComponent, filesystemComponent;
-	public HashMap<String,Modem> modemComponents = new HashMap<>();
-	public HashMap<String,Tunnel> tunnelComponents = new HashMap<>();
-    public HashMap<String,Internet> internetComponents = new HashMap<>();
-	public HashMap<String,Data> dataComponents = new HashMap<>();
-	public HashMap<String,Keyboard> keyboardComponents= new HashMap<>();
 
+	public HashMap<String, HashMap<String, ComponentBase>> listComponents = new HashMap<>();
+	public String temporaryFilesystemComponent = null;
 
-	public HashMap<String,UnknownComponent> unknownComponents =  new HashMap<>();
-    public HashSet<String> users = new HashSet<>();
-    public Player player = new Player();
-    
+	public HashMap<String, UnknownComponent> unknownComponents = new HashMap<>();
+	public HashSet<String> users = new HashSet<>();
+	public Player player = new Player();
+
 	public Stage stage;
 
 	// Le constructeur vide est nécessaire pour l'initialisation par FXML
 	public Machine() {
-		
+
+	}
+
+	public ComponentBase getFirstComponent(String type) {
+		if (!this.listComponents.containsKey(type))
+			return null;
+		return this.listComponents.get(type).get(this.listComponents.get(type).keySet().toArray()[0]);
 	}
 
 	public static void fromJSONObject(JSONObject machineConfig) {
@@ -97,48 +99,55 @@ public class Machine {
 			JSONArray components = machineConfig.getJSONArray("components");
 			JSONObject component;
 			String address;
+			String type;
 			for (int i = 0; i < components.length(); i++) {
 				component = components.getJSONObject(i);
-				address = component.getString("address");
+				address = component.optString("address",UUID.randomUUID().toString());
+				type = component.optString("type","type_name").toLowerCase();
 
-				switch (component.getString("type")) {
-					case "gpu":
-						machine.gpuComponent = new GPU(machine, address);
-						machine.gpuComponent.rawSetResolution(component.getInt("width"), component.getInt("height"));
-						break;
-					case "screen":
-						machine.screenComponents.put(address,new Screen(machine, address, component.getBoolean("precise"), component.getInt("blocksHorizontally"), component.getInt("blocksVertically"), component.optString("keyboard",UUID.randomUUID().toString())));
-						break;
-					case "computer":
-						machine.computerComponent = new vm.computer.components.Computer(machine, address);
-						break;
-					case "eeprom":
-						machine.eepromComponent = new EEPROM(machine, address, component.getString("label"), component.getString("path"), component.getString("data"));
-						break;
-					case "filesystem":
-						if (component.getBoolean("temporary"))
-							machine.temporaryFilesystemComponent = new Filesystem(machine, address, component.getString("label"), component.getString("path"), true, 64 * 1024);
-						else
-							machine.filesystemComponent = new Filesystem(machine, address, component.getString("label"), component.getString("path"), false, 12 * 1024 * 1024);
-						break;
-					case "modem":
-						machine.modemComponents.put(address,new Modem(machine, address, component.getString("wakeMessage"), component.getBoolean("wakeMessageFuzzy")));
-						break;
-					case "tunnel":
-						machine.tunnelComponents.put(address,new Tunnel(machine, address, component.getString("channel"), component.getString("wakeMessage"), component.getBoolean("wakeMessageFuzzy")));
-						break;
-					case "internet":
-                        machine.internetComponents.put(address,new Internet(machine, address));
-						break;
-					case "data":
-						machine.dataComponents.put(address,new Data(machine,address, component.optInt("tier",3)));
-						break;
-					case "keyboard":
-						machine.keyboardComponents.put(address,new Keyboard(machine,address));
-						break;
-					default:
-						machine.unknownComponents.put(address,new UnknownComponent(machine,address,component.getString("type")));
+				Class<?> clazz = null;
+
+				try {
+					if (type.isEmpty() || type.contains("."))
+						throw new ClassNotFoundException(type + " is not a valid ComponentBase subclass.");
+
+					// Dynamically load the class by name
+					clazz = Class.forName(
+							"vm.computer.components." + type.substring(0, 1).toUpperCase() + type.substring(1));
+
+					// Verify it is a subclass of ComponentBase
+					if (!ComponentBase.class.isAssignableFrom(clazz)) {
+						throw new ClassCastException(type + " is not a valid ComponentBase subclass.");
+					}
+				} catch (ClassNotFoundException | ClassCastException e) {
+					// Fallback to UnknownComponent if type is invalid or not found
+					clazz = UnknownComponent.class;
+					System.out.println("Falling back to UnknownComponent for type: " + type);
 				}
+
+				try {
+					// Ensure the machine's component map is initialized
+					machine.listComponents.putIfAbsent(type, new HashMap<>());
+
+					// Retrieve the constructor and create an instance
+					Constructor<?> constructor = clazz.getConstructor(Machine.class, String.class, JSONObject.class);
+					ComponentBase instance = (ComponentBase) constructor.newInstance(machine, address, component);
+
+					// Add the component to the machine's list
+					machine.listComponents.get(type).put(address, instance);
+
+					System.out.println("Loaded component: " + type + " at address: " + address);
+				} catch (Exception e) {
+					System.out.println("Failed to instantiate component: " + type + " at address: " + address);
+					e.printStackTrace();
+				}
+			}
+
+			if (!machine.listComponents.containsKey("computer")) {
+				machine.listComponents.put("computer", new HashMap<>());
+				address = UUID.randomUUID().toString();
+				machine.listComponents.get("computer").put(address, new vm.computer.components.Computer(machine,
+						address, new JSONObject().put("type", "computer")));
 			}
 
 			// Configure la mémoire vive
@@ -156,45 +165,38 @@ public class Machine {
 			machine.stage.setWidth(320);
 			machine.stage.setHeight(512);
 			machine.stage.setResizable(false);
-			machine.stage.setTitle("Computer@" + machine.computerComponent.address);
+			machine.stage.setTitle("Computer@" + machine.listComponents.get("computer").keySet().toArray()[0]);
 			machine.stage.getIcons().add(new Image(Objects.requireNonNull(Main.class.getResource("resources/images/Computer.png")).toString()));
 
 			// Met à jour les contrôles
 			machine.playerTextField.setText(machineConfig.getString("player"));
-			machine.HDDPathTextField.setText(machine.filesystemComponent.realPath);
-			machine.EEPROMPathTextField.setText(machine.eepromComponent.realPath);
-			
+			//machine.HDDPathTextField.setText(machine.filesystemComponent.realPath);
+			//machine.EEPROMPathTextField.setText(machine.eepromComponent.realPath);
+
 			machine.volumeSlider.setValue(machineConfig.getDouble("volume"));
 			machine.onVolumeSliderPressed();
-
-
 
 			// Gère le clic sur le bouton d'alimentation
 			machine.powerButton.addEventFilter(MouseEvent.MOUSE_PRESSED, event -> {
 				event.consume();
 
-				//machine.player.play(machine.player.powerButtonClicked);
-				
+				// machine.player.play(machine.player.powerButtonClicked);
+
 				if (machine.started)
 					machine.shutdown();
 				else
 					machine.boot();
 			});
 
-
-
 			// Gère la fermeture de la fenêtre
 			stage.setOnCloseRequest(event -> machine.onWindowClosed());
-
-
 
 			// Ajoute la machine à la liste des machines
 			list.add(machine);
 
 			// Affiche la fenêtre
 			stage.show();
-		}
-		catch (IOException e) {
+		} catch (IOException e) {
 			e.printStackTrace();
 		}
 	}
@@ -280,62 +282,65 @@ public class Machine {
 
 			// Enregistre au cas où
 			IO.saveConfig();
-		}
-		catch (IOException e) {
+		} catch (IOException e) {
 			e.printStackTrace();
 		}
 	}
 
-
 	public JSONObject toJSONObject() {
 		JSONArray components = new JSONArray();
-		for (ComponentBase component : componentList){
+		this.listComponents.forEach((type, list) -> list.forEach((addr, component) -> {
 			JSONObject obj = component.toJSONObject();
-			if(obj != null) {
+			if (obj != null) {
 				components.put(obj);
 			}
-		}
+		}));
 
-
-		
 		JSONArray configUsers = new JSONArray();
 		for (String user : users)
 			configUsers.put(user);
-		
+
 		return new JSONObject()
-			.put("x", stage.getX())
-			.put("y", stage.getY())
-			.put("width", stage.getWidth())
-			.put("height", stage.getHeight())
-			.put("components", components)
-			.put("totalMemory", RAMSlider.getValue())
-			.put("player", playerTextField.getText())
-			.put("volume", volumeSlider.getValue())
-			.put("users", configUsers);
+				.put("x", stage.getX())
+				.put("y", stage.getY())
+				.put("width", stage.getWidth())
+				.put("height", stage.getHeight())
+				.put("components", components)
+				.put("totalMemory", RAMSlider.getValue())
+				.put("player", playerTextField.getText())
+				.put("volume", volumeSlider.getValue())
+				.put("users", configUsers);
 	}
 
 	private void error(String text) {
-		gpuComponent.rawError("Unrecoverable error\n\n" + text);
-		gpuComponent.updaterThread.update();
+		Gpu gpu = (Gpu) getFirstComponent("gpu");
+		if (gpu != null) {
+			gpu.rawError("Unrecoverable error\n\n" + text);
+			gpu.updaterThread.update();
+		}else{
+			System.out.println("Error :" + text);
+		}
 
 		shutdown();
 	}
-	
+
 	public void onGenerateButtonPressed() {
 		generate();
 	}
-	
+
 	private void onWindowClosed() {
 		shutdown();
-		gpuComponent.updaterThread.interrupt();
 
-		componentList.forEach((componentBase -> {
-			if (componentBase instanceof ComponentWindowed){
-				((ComponentWindowed) componentBase).closeScreenWindows();
+		this.listComponents.forEach((type, list) -> list.forEach((addr, component) -> {
+			if (component instanceof Gpu) {
+				((Gpu) component).updaterThread.interrupt();
+			}
+			if (component instanceof ComponentWindowed) {
+				((ComponentWindowed) component).closeScreenWindows();
 			}
 		}));
 	}
-	
+
 	public void onVolumeSliderPressed() {
 		player.setVolume(volumeSlider.getValue());
 	}
@@ -343,27 +348,33 @@ public class Machine {
 	public static class LuaStateFactory {
 		private static class Architecture {
 			private static final String OS_ARCH = System.getProperty("os.arch");
+
 			private static boolean isOSArchMatch(String archPrefix) {
 				return OS_ARCH != null && OS_ARCH.startsWith(archPrefix);
 			}
 
-			static boolean
-				IS_OS_ARM = isOSArchMatch("arm"),
-				IS_OS_X86 = isOSArchMatch("x86") || isOSArchMatch("i386"),
-				IS_OS_X64 = isOSArchMatch("x86_64") || isOSArchMatch("amd64");
+			static boolean IS_OS_ARM = isOSArchMatch("arm"),
+					IS_OS_X86 = isOSArchMatch("x86") || isOSArchMatch("i386"),
+					IS_OS_X64 = isOSArchMatch("x86_64") || isOSArchMatch("amd64");
 		}
 
 		private static void prepareLoad(boolean use53) {
 			NativeSupport.getInstance().setLoader(() -> {
 				String architecture = "64", extension = "dll";
 
-				if (SystemUtils.IS_OS_FREE_BSD) extension = "bsd.so";
-				else if (SystemUtils.IS_OS_LINUX) extension = "so";
-				else if (SystemUtils.IS_OS_MAC) extension = "dylib";
+				if (SystemUtils.IS_OS_FREE_BSD)
+					extension = "bsd.so";
+				else if (SystemUtils.IS_OS_LINUX)
+					extension = "so";
+				else if (SystemUtils.IS_OS_MAC)
+					extension = "dylib";
 
-				if (Architecture.IS_OS_X64) architecture = "64";
-				else if (Architecture.IS_OS_X86) architecture = "32";
-				else if (Architecture.IS_OS_ARM) architecture = "32.arm";
+				if (Architecture.IS_OS_X64)
+					architecture = "64";
+				else if (Architecture.IS_OS_X86)
+					architecture = "32";
+				else if (Architecture.IS_OS_ARM)
+					architecture = "32.arm";
 
 				// Le nom final de la bibliothèque
 				String libraryPath = "lua" + (use53 ? "53" : "52") + "/native." + architecture + "." + extension;
@@ -376,8 +387,7 @@ public class Machine {
 
 						libraryFile.mkdirs();
 						IO.copyResourceToFile("libraries/" + libraryPath, libraryFile);
-					}
-					catch (IOException e) {
+					} catch (IOException e) {
 						e.printStackTrace();
 					}
 				}
@@ -387,7 +397,6 @@ public class Machine {
 				System.load(libraryFile.getPath());
 			});
 		}
-
 
 		public static LuaState load52() {
 			prepareLoad(false);
@@ -431,11 +440,10 @@ public class Machine {
 
 	public class LuaThread extends Thread {
 		public boolean shuttingDown = false;
-		
+
 		private final LuaState[] signalStack = new LuaState[256];
 
-
-
+		public Debugger debug = null;
 
 		@Override
 		public void run() {
@@ -449,16 +457,39 @@ public class Machine {
 
 				for (int i = 1; i <= args.getTop(); i++) {
 					switch (args.type(i)) {
-						case NIL: result.append("nil"); result.append(separator); break;
-						case BOOLEAN: result.append(args.toBoolean(i)); result.append(separator); break;
-						case NUMBER: result.append(args.toNumber(i)); result.append(separator); break;
-						case STRING: result.append(args.toString(i)); result.append(separator); break;
-						case TABLE: result.append("table"); result.append(separator); break;
-						case FUNCTION: result.append("function"); result.append(separator); break;
-						case THREAD: result.append("thread"); result.append(separator); break;
+						case NIL:
+							result.append("nil");
+							result.append(separator);
+							break;
+						case BOOLEAN:
+							result.append(args.toBoolean(i));
+							result.append(separator);
+							break;
+						case NUMBER:
+							result.append(args.toNumber(i));
+							result.append(separator);
+							break;
+						case STRING:
+							result.append(args.toString(i));
+							result.append(separator);
+							break;
+						case TABLE:
+							result.append("table");
+							result.append(separator);
+							break;
+						case FUNCTION:
+							result.append("function");
+							result.append(separator);
+							break;
+						case THREAD:
+							result.append("thread");
+							result.append(separator);
+							break;
 						case LIGHTUSERDATA:
 						case USERDATA:
-							result.append("userdata"); result.append(separator); break;
+							result.append("userdata");
+							result.append(separator);
+							break;
 					}
 				}
 				System.out.println(result);
@@ -473,9 +504,9 @@ public class Machine {
 			}
 
 			// Ajoute tous les composants
-			for (ComponentBase component : componentList) {
+			listComponents.forEach((type, list) -> list.forEach((addr, component) -> {
 				component.pushProxy();
-			}
+			}));
 
 			Platform.runLater(() -> {
 
@@ -485,31 +516,31 @@ public class Machine {
 				// Charge le code de la machine Lua
 				lua.setTotalMemory((int) (RAMSlider.getValue() * 1024 * 1024));
 				lua.load(IO.loadResourceAsString("resources/Machine.lua"), "=machine");
+				debug = new Debugger(lua);
 				lua.call(0, 0);
 
 				error("ordinateur arrêté");
-			}
-			catch (Exception e) {
+			} catch (Exception e) {
 				if (shuttingDown) {
 					System.out.println("Arrêt normal");
 					// Efface l'écran uniquement après la fin du processus Lua
 					// Sinon, il peut y avoir un cas où l'écran est déjà effacé pour l'arrêt,
 					// mais le processus Lua continue de dessiner sur l'écran
-					gpuComponent.flush();
-					gpuComponent.updaterThread.update();
-				}
-				else {
+					if(listComponents.containsKey("gpu")){
+						listComponents.get("gpu").forEach((addr,comp)->{
+							Gpu gpu = (Gpu)comp;
+							gpu.flush();
+							gpu.updaterThread.update();
+						});
+					}
+					
+				} else {
 					error(e.getMessage());
 				}
 			}
 		}
 
 		// Annule la répétition multiple des touches
-
-
-
-
-
 
 		public void pushSignal(LuaState signal) {
 			int nullIndex = -1;
@@ -531,22 +562,22 @@ public class Machine {
 
 		public LuaState pullSignal(double timeout) {
 			synchronized (this) {
-				long 
-					deadline = timeout == Double.POSITIVE_INFINITY ? Long.MAX_VALUE : System.currentTimeMillis() + (long) (timeout * 1000),
-					howMuchToWait;
+				long deadline = timeout == Double.POSITIVE_INFINITY ? Long.MAX_VALUE
+						: System.currentTimeMillis() + (long) (timeout * 1000),
+						howMuchToWait;
 
-//                System.out.println("Pulling signal infinite: " + (timeout == Double.POSITIVE_INFINITY) + ", timeout:" + timeout + ", deadline: " + deadline + ", delta: " + (deadline - System.currentTimeMillis()));
-				
+				// System.out.println("Pulling signal infinite: " + (timeout ==
+				// Double.POSITIVE_INFINITY) + ", timeout:" + timeout + ", deadline: " +
+				// deadline + ", delta: " + (deadline - System.currentTimeMillis()));
+
 				while (System.currentTimeMillis() <= deadline) {
 					if (shuttingDown) {
 						lua.setTotalMemory(1);
 						break;
-					}
-					else {
+					} else {
 						if (signalStack[0] != null) {
 							LuaState result = signalStack[0];
 
-							// Шифтим
 							boolean needClearEnd = signalStack[signalStack.length - 1] != null;
 
 							for (int i = 1; i < signalStack.length; i++)
@@ -554,7 +585,7 @@ public class Machine {
 
 							if (needClearEnd)
 								signalStack[signalStack.length - 1] = null;
-
+							System.out.println("event :" +result.toString(1));
 							return result;
 						}
 
@@ -563,26 +594,25 @@ public class Machine {
 							howMuchToWait = deadline - System.currentTimeMillis();
 							if (howMuchToWait > 0)
 								wait(howMuchToWait);
-						}
-						catch (ThreadDeath | InterruptedException e) {
+						} catch (ThreadDeath | InterruptedException e) {
 							System.out.println("Le thread a été interrompu chez l'ordinateur.");
 						}
 					}
 				}
-				
+
 				return new LuaState();
 			}
 		}
 	}
-	
+
 	public void shutdown() {
 		if (started) {
 			started = false;
-			
+
 			player.stop(player.computerRunning);
 			powerButton.setSelected(false);
 			propertiesVBox.setDisable(false);
-			
+
 			luaThread.shuttingDown = true;
 			luaThread.interrupt();
 		}
@@ -592,30 +622,36 @@ public class Machine {
 		if (!started) {
 			started = true;
 			startTime = System.currentTimeMillis();
-			
-			File EEPROMFile = new File(eepromComponent.realPath);
-			if (EEPROMFile.exists()) {
-				try {
-					System.out.println("Loading EEPROM from " + eepromComponent.realPath);
-					eepromComponent.code = IO.loadFileAsByteArray(EEPROMFile.toURI());
-					
-					// Il faut nettoyer l'écran, au cas où un écran bleu de la mort se serait glissé.
-					gpuComponent.flush();
-					gpuComponent.updaterThread.update();
+			Eeprom eepromComponent = (Eeprom) getFirstComponent("eeprom");
+			if (eepromComponent == null) {
+				error("please insert an eeprom");
+			} else {
+				File EEPROMFile = new File(eepromComponent.realPath);
+				if (EEPROMFile.exists()) {
+					try {
+						System.out.println("Loading EEPROM from " + eepromComponent.realPath);
+						eepromComponent.code = IO.loadFileAsByteArray(EEPROMFile.toURI());
 
-					propertiesVBox.setDisable(true);
-					powerButton.setSelected(true);
-					player.play(player.computerRunning);
+						// Il faut nettoyer l'écran, au cas où un écran bleu de la mort se serait
+						// glissé.
+						Gpu gpu = (Gpu) getFirstComponent("gpu");
+						if(gpu != null){
+							gpu.flush();
+							gpu.updaterThread.update();
+						}
 
-					luaThread = new LuaThread();
-					luaThread.start();
+						propertiesVBox.setDisable(true);
+						powerButton.setSelected(true);
+						player.play(player.computerRunning);
+
+						luaThread = new LuaThread();
+						luaThread.start();
+					} catch (IOException e) {
+						e.printStackTrace();
+					}
+				} else {
+					error("EEPROM.lua file not exists");
 				}
-				catch (IOException e) {
-					e.printStackTrace();
-				}
-			}
-			else {
-				error("EEPROM.lua file not exists");
 			}
 		}
 	}
@@ -623,12 +659,12 @@ public class Machine {
 	private interface OnFileChosen {
 		void run(File file);
 	}
-	
+
 	public void chooseFile(String title, OnFileChosen onFileChosen) {
 		FileChooser fileChooser = new FileChooser();
 		fileChooser.setTitle(title);
 		fileChooser.setInitialDirectory(IO.machinesFile);
-		
+
 		File file = fileChooser.showOpenDialog(stage);
 		if (file != null) {
 			onFileChosen.run(file);
@@ -639,24 +675,26 @@ public class Machine {
 		DirectoryChooser fileChooser = new DirectoryChooser();
 		fileChooser.setTitle(title);
 		fileChooser.setInitialDirectory(IO.machinesFile);
-		
+
 		File file = fileChooser.showDialog(stage);
 		if (file != null) {
 			onFileChosen.run(file);
 		}
 	}
-	
+
 	public void onEEPROMChooseClicked() {
-		chooseFile("Choose EEPROM.lua file", (file) -> {
+		if(this.listComponents.containsKey("eeprom")) chooseFile("Choose EEPROM.lua file", (file) -> {
+			
 			EEPROMPathTextField.setText(file.getPath());
-			eepromComponent.realPath = file.getPath();
+			//Eeprom eeprom = (Eeprom) getFirstComponent("eeprom");
+			//eepromComponent.realPath = file.getPath();
 		});
 	}
 
 	public void onHDDChooseClicked() {
 		chooseDirectory("Choose HDD directory", (file) -> {
 			HDDPathTextField.setText(file.getPath());
-			filesystemComponent.realPath = file.getPath();
+			//filesystemComponent.realPath = file.getPath();
 		});
 	}
 }

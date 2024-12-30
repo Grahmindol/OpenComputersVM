@@ -3,6 +3,7 @@ package vm.computer.components;
 import li.cil.repack.com.naef.jnlua.LuaState;
 import org.json.JSONObject;
 import vm.computer.Machine;
+import vm.computer.components.base.ComponentBase;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -13,8 +14,8 @@ import java.util.Map;
 public class Internet extends ComponentBase {
 	public static final int defaultReadLength = 1024;
 	
-	public Internet(Machine machine, String address) {
-		super(machine, address, "internet");
+	public Internet(Machine machine, String address, JSONObject obj) {
+		super(machine, address, obj);
 	}
 
 	@SuppressWarnings("unchecked")

@@ -16,6 +16,7 @@ import vm.Main;
 import vm.computer.Glyph;
 import vm.computer.KeyMap;
 import vm.computer.Machine;
+import vm.computer.components.Screen;
 
 import java.awt.*;
 import java.awt.datatransfer.DataFlavor;
@@ -102,7 +103,7 @@ public class ScreenController {
                 LuaState luaState = new LuaState();
 
                 luaState.pushString("clipboard");
-                luaState.pushString(machine.screenComponents.get(address).keyboard.address);
+                luaState.pushString(((Screen)machine.listComponents.get("screen").get(address)).keyboard);
                 luaState.pushString(getClipboard());
                 luaState.pushString(machine.playerTextField.getText());
 
@@ -137,12 +138,13 @@ public class ScreenController {
     }
 
     private void pushKeySignal(KeyCode keyCode, String text, String name) {
+        if(((Screen)machine.listComponents.get("screen").get(address)).keyboard == null) return;
         if(machine.luaThread == null) return;
         KeyMap.OCKey ocKey = KeyMap.get(keyCode);
 
         LuaState luaState = new LuaState();
         luaState.pushString(name);
-        luaState.pushString(machine.screenComponents.get(address).keyboard.address);
+        luaState.pushString(((Screen)machine.listComponents.get("screen").get(address)).keyboard);
         luaState.pushInteger(text.length() > 0 ? text.codePointAt(0) : ocKey.unicode);
         luaState.pushInteger(ocKey.ascii);
         luaState.pushString(machine.playerTextField.getText());
@@ -212,7 +214,7 @@ public class ScreenController {
             LuaState luaState = new LuaState();
             luaState.pushString(name);
             luaState.pushString(this.address);
-            if (machine.screenComponents.get(address).precise) {
+            if (((Screen)machine.listComponents.get("screen").get(address)).precise) {
                 luaState.pushNumber(x);
                 luaState.pushNumber(y);
             }

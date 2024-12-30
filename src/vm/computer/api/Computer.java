@@ -60,7 +60,7 @@ public class Computer extends APIBase {
 		machine.lua.setField(-2, "getProgramLocations");
 
 		machine.lua.pushJavaFunction(args -> {
-			machine.lua.pushString(machine.temporaryFilesystemComponent.address);
+			machine.lua.pushString(machine.temporaryFilesystemComponent);
 
 			return 1;
 		});
