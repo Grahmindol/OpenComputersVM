@@ -7,6 +7,7 @@ import li.cil.repack.com.naef.jnlua.LuaType;
 
 public class Debugger {
     public Stack<String> callStack = new Stack<>();
+    
 
     public Debugger(LuaState L){
         L.getGlobal("debug"); // Push 'debug' table onto the stack
@@ -84,7 +85,7 @@ public class Debugger {
 
     private void handleReturnEvent(LuaState args) {
         if(callStack.isEmpty()) return;
-
+        try{
         args.getGlobal("debug");
         args.getField(-1, "getinfo");
         args.pushInteger(2); 
@@ -97,6 +98,9 @@ public class Debugger {
     
         if (functionSource.equals("=[C]") || functionSource.equals("=machine")) return;
         callStack.pop();
+        }catch(Error e){
+            System.out.println("Debug fail !");
+        }
     }
 
     private void handleLineEvent(LuaState args) {

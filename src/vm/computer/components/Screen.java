@@ -25,7 +25,6 @@ public class Screen extends ComponentWindowed {
 
 	public Screen(Machine machine, String address, JSONObject obj) throws IOException {
 		super(machine, address, obj);
-		controller = new ScreenController(machine,address);
 
 		this.keyboard = obj.optString("keyboard",null);
 		this.precise = obj.optBoolean("precise",false);
@@ -34,6 +33,7 @@ public class Screen extends ComponentWindowed {
 		this.isOn = true;
 
 		FXMLLoader fxmlLoader = new FXMLLoader(Machine.class.getResource("screen.fxml"));
+		controller = new ScreenController(machine,address,this.keyboard);
 		fxmlLoader.setController(controller);
 		if (keyboard != null) {
 			stage.setTitle("Screen@" + address + " | Keyboard@" + this.keyboard);

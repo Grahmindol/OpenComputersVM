@@ -150,6 +150,16 @@ public class Machine {
 						address, new JSONObject().put("type", "computer")));
 			}
 
+			if(machine.listComponents.containsKey("screen")){
+				machine.listComponents.get("screen").forEach((addr,comp)->{
+					Screen screen = (Screen)comp;
+					if(screen.keyboard != null){
+						machine.listComponents.putIfAbsent("keyboard", new HashMap<>());
+						machine.listComponents.get("keyboard").put(screen.keyboard, new Keyboard(machine, screen.keyboard));
+					}
+				});
+			}
+
 			// Configure la mémoire vive
 			machine.RAMSlider.setValue(machineConfig.getDouble("totalMemory"));
 
@@ -520,7 +530,7 @@ public class Machine {
 				lua.call(0, 0);
 
 				error("ordinateur arrêté");
-			} catch (Exception e) {
+			} catch (Exception | Error e) {
 				if (shuttingDown) {
 					System.out.println("Arrêt normal");
 					// Efface l'écran uniquement après la fin du processus Lua
@@ -585,7 +595,7 @@ public class Machine {
 
 							if (needClearEnd)
 								signalStack[signalStack.length - 1] = null;
-							System.out.println("event :" +result.toString(1));
+							//System.out.println("event :" +result.toString(1));
 							return result;
 						}
 

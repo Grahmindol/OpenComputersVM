@@ -41,7 +41,7 @@ public class Computer extends APIBase {
 		
 		machine.lua.pushJavaFunction(args -> {
 			boolean reboot = !args.isNoneOrNil(1) && args.checkBoolean(1);
-			System.out.println("Сышь компутер.шутдаун() спахал");
+			System.out.println("Shutdown computer.shutdown()");
 			
 			new Thread(() -> {
 				machine.shutdown();

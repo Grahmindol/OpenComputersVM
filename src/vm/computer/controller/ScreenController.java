@@ -41,11 +41,12 @@ public class ScreenController {
     private final HashMap<KeyCode, String> codes = new HashMap<>();
     private KeyCode lastCode;
     private Timer keyDownRepeater;
+    private String keyboard;
 
-    public ScreenController(Machine machine, String address) {
+    public ScreenController(Machine machine, String address, String keyboard) {
         this.address = address;
         this.machine = machine;
-
+        this.keyboard = keyboard;
 
     }
 
@@ -86,6 +87,7 @@ public class ScreenController {
             }
         });
 
+        if(keyboard != null)
         screenGridPane.setOnKeyReleased(event -> {
             KeyCode keyCode = event.getCode();
             if (codes.containsKey(keyCode)) {
@@ -103,7 +105,7 @@ public class ScreenController {
                 LuaState luaState = new LuaState();
 
                 luaState.pushString("clipboard");
-                luaState.pushString(((Screen)machine.listComponents.get("screen").get(address)).keyboard);
+                luaState.pushString(keyboard);
                 luaState.pushString(getClipboard());
                 luaState.pushString(machine.playerTextField.getText());
 
@@ -138,7 +140,7 @@ public class ScreenController {
     }
 
     private void pushKeySignal(KeyCode keyCode, String text, String name) {
-        if(((Screen)machine.listComponents.get("screen").get(address)).keyboard == null) return;
+        if(keyboard == null) return;
         if(machine.luaThread == null) return;
         KeyMap.OCKey ocKey = KeyMap.get(keyCode);
 
